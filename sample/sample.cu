@@ -31,12 +31,13 @@ float random_f32(unsigned long long *state)
 }
 
 // GPU version
-__device__ void random_f32_device(unsigned long long *state, float *rand) {
+__device__ float random_f32_device(unsigned long long *state) {
     *state ^= *state >> 12;
     *state ^= *state << 25;
     *state ^= *state >> 27;
     unsigned int immediate = (*state * 0x2545F4914F6CDD1Dull) >> 32;
-    *rand = (immediate >> 8) / 16777216.0f;
+    float rand = (immediate >> 8) / 16777216.0f;
+    return rand;
 }
 
 class ProbIndex
@@ -302,7 +303,7 @@ __device__ void sample_topp_kernel(float *probabilities, int n, float topp, Prob
     *next = probindex[last_idx].index; // in case of rounding errors
 }
 
-__global__ void sample_kernel(float *d_logits, float *d_coin, float temperature, int vocab_size, float topp, unsigned long long rng_state, ProbIndex *d_probindex, int *d_next)
+__global__ static void sample_kernel(float *d_logits, float *d_coin, float temperature, int vocab_size, float topp, unsigned long long rng_state, ProbIndex *d_probindex, int *d_next)
 {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (temperature == 0.0f) {
@@ -314,17 +315,16 @@ __global__ void sample_kernel(float *d_logits, float *d_coin, float temperature,
         // apply softmax to the logits to get the probabilities for next token
         softmax_kernel(d_logits, vocab_size);
         // flip a (float) coin (this is our source of entropy for sampling)
-        random_f32_device(&rng_state, d_coin);
+        float coin = random_f32_device(&rng_state);
         // we sample from this distribution to get the next token
         if (topp <= 0 || topp >= 1) {
             // simply sample from the predicted probability distribution
             sampel_argmax_kernel(d_logits, vocab_size, d_next);
         } else {
             // top-p (nucleus) sampling, clamping the least likely tokens to zero
-            sample_topp_kernel(d_logits, vocab_size, topp, d_probindex, *d_coin, d_next);
+            sample_topp_kernel(d_logits, vocab_size, topp, d_probindex, coin, d_next);
         }
     }
-    
 }
 
 // Function to generate random for array
