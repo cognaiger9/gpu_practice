@@ -6,6 +6,9 @@ CUDA_FLAGS = -gencode arch=compute_86,code=sm_86 -lcublas # rtx
 main: transpose.cu
 	$(CUC) $(CUDA_FLAGS) -o main transpose.cu
 
+max: arg_max.cu
+	$(CUC) $(CUDA_FLAGS) -o max arg_max.cu
+
 .PHONY: clean
 clean:
 	rm -f main
